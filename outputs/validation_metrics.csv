@@ -1,0 +1,3 @@
+product,model,selection_rule,MAE,RMSE,R2
+subscription,ridge_regression,lowest mean 5-fold CV MAE,30.6748003977249,38.66281117614478,0.9265741964920994
+ad_supported,linear_regression,lowest mean 5-fold CV MAE,18.150054403139034,22.622038637818072,0.9225599051561795
