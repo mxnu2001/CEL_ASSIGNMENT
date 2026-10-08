@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Predict D180 LTV for rows in a CSV using the saved product models."""
+"""Predict D180 LTV and ROAS for CSV rows using the saved product models."""
 
 from __future__ import annotations
 
@@ -17,10 +17,15 @@ DEFAULT_MODEL = ROOT / "models" / "cel_d180_ltv.joblib"
 
 def predict_dataframe(data: pd.DataFrame, artifact: dict) -> pd.DataFrame:
     """Return predictions for user input rows using a loaded model artifact."""
+    data = data.copy()
+    if "cac" not in data.columns and "CAC" in data.columns:
+        data = data.rename(columns={"CAC": "cac"})
     if data.empty:
         raise ValueError("Add at least one user row before requesting predictions.")
     if "product" not in data.columns:
         raise ValueError("Input CSV must contain a 'product' column.")
+    if "cac" not in data.columns:
+        raise ValueError("Input data must include 'cac' (acquisition cost per user) to calculate ROAS.")
 
     unknown = sorted(set(data["product"].dropna()) - set(artifact["products"]))
     if unknown:
@@ -39,6 +44,13 @@ def predict_dataframe(data: pd.DataFrame, artifact: dict) -> pd.DataFrame:
                 f"Input rows for {product} are missing feature columns: {missing}"
             )
         X = product_rows[features].apply(pd.to_numeric, errors="coerce")
+        cac = pd.to_numeric(product_rows["cac"], errors="coerce")
+        invalid_cac = cac.isna() | ~np.isfinite(cac) | (cac <= 0)
+        if invalid_cac.any():
+            row_labels = (product_rows.index[invalid_cac] + 2).tolist()
+            raise ValueError(
+                f"CAC must be a positive number for {product} row(s) {row_labels}."
+            )
         must_have = [name for name in features if name != "days_to_trial"]
         incomplete = X[must_have].isna().any(axis=1)
         if incomplete.any():
@@ -57,7 +69,13 @@ def predict_dataframe(data: pd.DataFrame, artifact: dict) -> pd.DataFrame:
             "predicted_d180_ltv_inr": prediction,
             "lower_80_inr": lower,
             "upper_80_inr": upper,
+            "cac_inr": cac.to_numpy(),
+            "predicted_d180_roas": prediction / cac.to_numpy(),
+            "lower_80_roas": lower / cac.to_numpy(),
+            "upper_80_roas": upper / cac.to_numpy(),
         }
+        if "campaign" in product_rows.columns:
+            result_columns["campaign"] = product_rows["campaign"].to_numpy()
         for identifier in ("test_user_id", "user_id"):
             if identifier in product_rows.columns:
                 result_columns[identifier] = product_rows[identifier].to_numpy()
@@ -65,6 +83,32 @@ def predict_dataframe(data: pd.DataFrame, artifact: dict) -> pd.DataFrame:
         results.append(block)
 
     return pd.concat(results).sort_index()
+
+
+def summarize_campaign_roas(predictions: pd.DataFrame) -> pd.DataFrame:
+    """Aggregate predicted revenue and acquisition cost by product and campaign."""
+    if "campaign" not in predictions.columns:
+        return pd.DataFrame()
+    rows = predictions.copy()
+    rows["campaign"] = rows["campaign"].fillna("").astype(str).str.strip()
+    rows = rows.loc[rows["campaign"] != ""]
+    if rows.empty:
+        return pd.DataFrame()
+    summary = (
+        rows.groupby(["product", "campaign"], as_index=False)
+        .agg(
+            users=("predicted_d180_ltv_inr", "size"),
+            predicted_revenue_inr=("predicted_d180_ltv_inr", "sum"),
+            lower_80_revenue_inr=("lower_80_inr", "sum"),
+            upper_80_revenue_inr=("upper_80_inr", "sum"),
+            acquisition_cost_inr=("cac_inr", "sum"),
+        )
+    )
+    cost = summary["acquisition_cost_inr"]
+    summary["predicted_d180_roas"] = summary["predicted_revenue_inr"] / cost
+    summary["lower_80_roas"] = summary["lower_80_revenue_inr"] / cost
+    summary["upper_80_roas"] = summary["upper_80_revenue_inr"] / cost
+    return summary
 
 
 def predict(
@@ -94,11 +138,16 @@ def predict(
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output.to_csv(output_path, index=False)
     print(f"Wrote predictions to {output_path}")
+    campaign_summary = summarize_campaign_roas(output)
+    if not campaign_summary.empty:
+        summary_path = output_path.with_name(f"{output_path.stem}_campaign_summary.csv")
+        campaign_summary.to_csv(summary_path, index=False)
+        print(f"Wrote campaign ROAS summary to {summary_path}")
 
 
 def main() -> None:
     parser = argparse.ArgumentParser(
-        description="Predict D180 LTV from new Day 0–7 user metrics."
+        description="Predict D180 LTV and ROAS from Day 0–7 metrics and CAC."
     )
     parser.add_argument("input_csv", type=Path, help="CSV containing new user metrics")
     parser.add_argument(

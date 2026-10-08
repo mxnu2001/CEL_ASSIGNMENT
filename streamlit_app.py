@@ -10,7 +10,7 @@ import joblib
 import pandas as pd
 import streamlit as st
 
-from predict_ltv import predict_dataframe
+from predict_ltv import predict_dataframe, summarize_campaign_roas
 
 
 ROOT = Path(__file__).resolve().parent
@@ -185,7 +185,7 @@ def main() -> None:
         "ad_view_rate_7",
         "rewarded_ad_rate_7",
     ]
-    input_columns = ["test_user_id", "product"] + all_features
+    input_columns = ["test_user_id", "product", "campaign", "cac"] + all_features
 
     uploaded_file = st.file_uploader(
         "Upload user inputs as a CSV (optional)", type=["csv"]
@@ -210,6 +210,8 @@ def main() -> None:
                     )
             if "product" not in uploaded_data.columns:
                 uploaded_data["product"] = None
+            if "cac" not in uploaded_data.columns and "CAC" in uploaded_data.columns:
+                uploaded_data = uploaded_data.rename(columns={"CAC": "cac"})
             uploaded_rows = uploaded_data.reindex(columns=input_columns)
             file_signature = hashlib.sha256(uploaded_file.getvalue()).hexdigest()[:12]
             editor_key = f"ltv_user_inputs_upload_{file_signature}"
@@ -218,8 +220,8 @@ def main() -> None:
                 "Review or edit them in the input table below."
             )
             st.caption(
-                "Unused CSV columns are ignored. Missing model-input columns appear blank "
-                "and can be filled in the table."
+                "Unused CSV columns are ignored. Missing model-input columns and CAC appear "
+                "blank and can be filled in the table."
             )
         except (pd.errors.ParserError, UnicodeDecodeError, ValueError) as error:
             st.error(f"Could not load this CSV: {error}")
@@ -234,6 +236,8 @@ def main() -> None:
         placeholder_row = {column: None for column in input_columns}
         placeholder_row["test_user_id"] = "Example-001"
         placeholder_row["product"] = example_product
+        placeholder_row["campaign"] = example.get("campaign")
+        placeholder_row["cac"] = example.get("cac")
         active_features = set(artifact["products"][example_product]["features"])
         for feature in all_features:
             if (
@@ -257,6 +261,17 @@ def main() -> None:
             help="Choose the model that matches the user's product.",
             options=["subscription", "ad_supported"],
         ),
+        "campaign": st.column_config.TextColumn(
+            "Campaign",
+            help="Optional campaign label used to calculate campaign-level ROAS summaries.",
+        ),
+        "cac": st.column_config.NumberColumn(
+            "CAC (INR/user)",
+            help="Acquisition cost per user. Required for ROAS. This is an economic input, not an LTV model feature.",
+            min_value=0.01,
+            step=1.0,
+            format="₹ %.2f",
+        ),
     }
     for feature in all_features:
         label, description, minimum, maximum, step = FIELD_DETAILS[feature]
@@ -274,7 +289,19 @@ def main() -> None:
             {"Input": FIELD_DETAILS[name][0], "Description": FIELD_DETAILS[name][1]}
             for name in all_features
         ]
-        st.dataframe(pd.DataFrame(description_rows), hide_index=True, use_container_width=True)
+        description_rows.extend(
+            [
+                {
+                    "Input": "Campaign",
+                    "Description": "Optional acquisition campaign label used to group campaign-level ROAS results.",
+                },
+                {
+                    "Input": "CAC (INR/user)",
+                    "Description": "Positive acquisition cost per user. ROAS is predicted D180 LTV divided by CAC; CAC is not used to predict LTV.",
+                },
+            ]
+        )
+        st.dataframe(pd.DataFrame(description_rows), hide_index=True, width="stretch")
         st.caption(
             "Campaign, CAC, actual D180 LTV, and derived fields not used by the selected "
             "models are excluded from the prediction inputs."
@@ -288,14 +315,14 @@ def main() -> None:
     st.write(
         "Edit the first row or use the table's add-row control to enter more users. "
         "Hover over a column heading for its short description. Leave the unused "
-        "product-specific fields blank."
+        "product-specific fields blank. Enter a positive CAC for every row to calculate ROAS."
     )
     entered = st.data_editor(
         initial_rows,
         num_rows="dynamic",
         column_config=column_config,
         hide_index=True,
-        use_container_width=True,
+        width="stretch",
         key=editor_key,
     )
 
@@ -308,11 +335,27 @@ def main() -> None:
             if inputs["test_user_id"].duplicated().any():
                 raise ValueError("Each User ID must be unique.")
             predictions = predict_dataframe(inputs, artifact)
-            st.subheader("Predicted D180 LTV")
+            preferred_columns = [
+                "test_user_id",
+                "product",
+                "campaign",
+                "cac_inr",
+                "model",
+                "predicted_d180_ltv_inr",
+                "lower_80_inr",
+                "upper_80_inr",
+                "predicted_d180_roas",
+                "lower_80_roas",
+                "upper_80_roas",
+            ]
+            predictions = predictions[
+                [column for column in preferred_columns if column in predictions.columns]
+            ]
+            st.subheader("Predicted D180 LTV and ROAS")
             st.dataframe(
                 predictions,
                 hide_index=True,
-                use_container_width=True,
+                width="stretch",
                 column_config={
                     "predicted_d180_ltv_inr": st.column_config.NumberColumn(
                         "Predicted LTV (INR)", format="₹ %.2f"
@@ -323,8 +366,45 @@ def main() -> None:
                     "upper_80_inr": st.column_config.NumberColumn(
                         "Upper 80% range (INR)", format="₹ %.2f"
                     ),
+                    "cac_inr": st.column_config.NumberColumn(
+                        "CAC (INR/user)", format="₹ %.2f"
+                    ),
+                    "predicted_d180_roas": st.column_config.NumberColumn(
+                        "Predicted D180 ROAS (x)", format="%.2f"
+                    ),
+                    "lower_80_roas": st.column_config.NumberColumn(
+                        "Lower 80% ROAS (x)", format="%.2f"
+                    ),
+                    "upper_80_roas": st.column_config.NumberColumn(
+                        "Upper 80% ROAS (x)", format="%.2f"
+                    ),
                 },
             )
+            campaign_summary = summarize_campaign_roas(predictions)
+            if not campaign_summary.empty:
+                st.subheader("Campaign-level ROAS")
+                st.dataframe(
+                    campaign_summary,
+                    hide_index=True,
+                    width="stretch",
+                    column_config={
+                        "predicted_d180_roas": st.column_config.NumberColumn(
+                            "Predicted D180 ROAS (x)", format="%.2f"
+                        ),
+                        "lower_80_roas": st.column_config.NumberColumn(
+                            "Lower 80% ROAS (x)", format="%.2f"
+                        ),
+                        "upper_80_roas": st.column_config.NumberColumn(
+                            "Upper 80% ROAS (x)", format="%.2f"
+                        ),
+                        "predicted_revenue_inr": st.column_config.NumberColumn(
+                            "Predicted revenue (INR)", format="₹ %.2f"
+                        ),
+                        "acquisition_cost_inr": st.column_config.NumberColumn(
+                            "Acquisition cost (INR)", format="₹ %.2f"
+                        ),
+                    },
+                )
             st.download_button(
                 "Download predictions CSV",
                 predictions.to_csv(index=False).encode("utf-8"),
@@ -332,7 +412,9 @@ def main() -> None:
                 mime="text/csv",
             )
             st.caption(
-                "The range is an empirical estimate from synthetic data, not a guarantee. "
+                "ROAS is predicted D180 LTV divided by CAC. Campaign summaries aggregate "
+                "predicted revenue and acquisition cost by product and campaign. The range "
+                "is an empirical estimate from synthetic data, not a guarantee. "
                 "This model is for demonstration and is not trained on CEL production data."
             )
         except (KeyError, TypeError, ValueError) as error:
