@@ -1,0 +1,2 @@
+product,model,predicted_d180_ltv_inr,lower_80_inr,upper_80_inr,test_user_id
+subscription,ridge_regression,79.90465884639971,29.008196817048066,130.82774734347635,TEST-004
