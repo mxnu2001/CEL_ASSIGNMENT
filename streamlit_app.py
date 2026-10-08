@@ -3,6 +3,7 @@
 
 from __future__ import annotations
 
+import hashlib
 from pathlib import Path
 
 import joblib
@@ -185,6 +186,45 @@ def main() -> None:
         "rewarded_ad_rate_7",
     ]
     input_columns = ["test_user_id", "product"] + all_features
+
+    uploaded_file = st.file_uploader(
+        "Upload user inputs as a CSV (optional)", type=["csv"]
+    )
+    uploaded_rows = None
+    editor_key = "ltv_user_inputs_example"
+    if uploaded_file is not None:
+        try:
+            uploaded_data = pd.read_csv(uploaded_file)
+            if uploaded_data.empty:
+                raise ValueError("The uploaded CSV has no user rows.")
+            if "test_user_id" not in uploaded_data.columns:
+                if "user_id" in uploaded_data.columns:
+                    uploaded_data = uploaded_data.rename(
+                        columns={"user_id": "test_user_id"}
+                    )
+                else:
+                    uploaded_data.insert(
+                        0,
+                        "test_user_id",
+                        [f"Upload-{index:03d}" for index in range(1, len(uploaded_data) + 1)],
+                    )
+            if "product" not in uploaded_data.columns:
+                uploaded_data["product"] = None
+            uploaded_rows = uploaded_data.reindex(columns=input_columns)
+            file_signature = hashlib.sha256(uploaded_file.getvalue()).hexdigest()[:12]
+            editor_key = f"ltv_user_inputs_upload_{file_signature}"
+            st.success(
+                f"Loaded {len(uploaded_rows)} row(s) from {uploaded_file.name}. "
+                "Review or edit them in the input table below."
+            )
+            st.caption(
+                "Unused CSV columns are ignored. Missing model-input columns appear blank "
+                "and can be filled in the table."
+            )
+        except (pd.errors.ParserError, UnicodeDecodeError, ValueError) as error:
+            st.error(f"Could not load this CSV: {error}")
+            st.stop()
+
     if "ltv_placeholder_row" not in st.session_state:
         synthetic_data = pd.read_csv(ROOT / "data" / "synthetic_users.csv")
         example_product = synthetic_data["product"].sample(n=1).iloc[0]
@@ -203,9 +243,10 @@ def main() -> None:
             ):
                 placeholder_row[feature] = example[feature]
         st.session_state["ltv_placeholder_row"] = placeholder_row
-    initial_rows = pd.DataFrame(
+    example_rows = pd.DataFrame(
         [st.session_state["ltv_placeholder_row"]], columns=input_columns
     )
+    initial_rows = uploaded_rows if uploaded_rows is not None else example_rows
 
     column_config = {
         "test_user_id": st.column_config.TextColumn(
@@ -255,7 +296,7 @@ def main() -> None:
         column_config=column_config,
         hide_index=True,
         use_container_width=True,
-        key="ltv_user_inputs",
+        key=editor_key,
     )
 
     if st.button("Predict D180 LTV", type="primary"):
