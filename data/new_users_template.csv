@@ -1,0 +1,3 @@
+product,active_days_7,sessions_7,avg_session_min_7,sessions_per_active_day_7,d1_retained,d3_retained,d7_retained,days_since_last_active_7,session_momentum_7,median_gap_hours_7,social_actions_7,trial_started_d7,subscription_started_d7,days_to_trial,ad_impressions_7,ad_views_7,rewarded_ads_watched_7,ad_view_rate_7,rewarded_ad_rate_7
+subscription,4,8,11.57,2,0,1,0,0,0.6,46.25,0,1,1,4,,,,,
+ad_supported,2,2,6.92,1,0,0,0,6,1,52.51,0,,,,8,12,4,1.5,0.5

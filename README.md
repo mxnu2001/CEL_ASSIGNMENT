@@ -17,8 +17,20 @@ Campaign A and Campaign B are assumed acquisition strategies because the assignm
 ## Run
 ```bash
 pip install -r requirements.txt
-python notebooks/cel_ltv_model.py
+python train_model.py
 ```
+
+## Predict for new users
+
+Training saves the selected subscription and ad-supported models to `models/cel_d180_ltv.joblib`. The models are refit on all labeled synthetic users, and the artifact includes the feature schema and empirical 80% prediction-range offsets.
+
+Copy `data/new_users_template.csv`, replace the example Day 0–7 values with one row per user, and keep the `product` value as either `subscription` or `ad_supported`. Leave `days_to_trial` blank when a subscription user did not start a trial. Subscription rows use the trial/subscription columns; ad-supported rows use the ad columns. The unused product-specific columns may remain blank.
+
+```bash
+python predict_ltv.py my_new_users.csv --output predictions.csv
+```
+
+The output includes predicted D180 LTV and an empirical 80% range in INR for each row. The prediction range describes residual variation in this synthetic validation setup; it is not a guarantee. Retrain after changing the training data or selected models.
 
 ## Important
 This is NOT a production model and is NOT CEL's real data. The synthetic outcome-generating process is intentionally constructed for learning. You should change the assumptions, features, model and narrative before submitting.
