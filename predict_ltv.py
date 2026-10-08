@@ -50,16 +50,17 @@ def predict(input_path: Path, output_path: Path, model_path: Path) -> None:
         prediction = np.clip(details["model"].predict(X), 0, None)
         lower = np.clip(prediction + details["residual_p10"], 0, None)
         upper = np.clip(prediction + details["residual_p90"], 0, None)
-        block = pd.DataFrame(
-            {
-                "product": product,
-                "model": details["model_name"],
-                "predicted_d180_ltv_inr": prediction,
-                "lower_80_inr": lower,
-                "upper_80_inr": upper,
-            },
-            index=product_rows.index,
-        )
+        result_columns = {
+            "product": product,
+            "model": details["model_name"],
+            "predicted_d180_ltv_inr": prediction,
+            "lower_80_inr": lower,
+            "upper_80_inr": upper,
+        }
+        for identifier in ("test_user_id", "user_id"):
+            if identifier in product_rows.columns:
+                result_columns[identifier] = product_rows[identifier].to_numpy()
+        block = pd.DataFrame(result_columns, index=product_rows.index)
         results.append(block)
 
     output = pd.concat(results).sort_index()

@@ -30,6 +30,8 @@ Copy `data/new_users_template.csv`, replace the example Day 0–7 values with on
 python predict_ltv.py my_new_users.csv --output predictions.csv
 ```
 
+For a ready-to-run example, use `data/test_users_for_prediction.csv`; its example results are in `outputs/test_user_predictions.csv`.
+
 The output includes predicted D180 LTV and an empirical 80% range in INR for each row. The prediction range describes residual variation in this synthetic validation setup; it is not a guarantee. Retrain after changing the training data or selected models.
 
 ## Important
