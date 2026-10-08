@@ -1,66 +1,68 @@
 # CEL Analyst Assignment — End-to-End Reference
 
-This project is a reference implementation of the supplied assignment.
+This project is a reference implementation using synthetic user data.
 
-## What it does
-- Generates synthetic user-level Day 0–7 data.
-- Separates subscription and ad-supported products.
-- Trains a simple baseline and a nonlinear regression model.
-- Predicts D180 LTV from D0–D7 inputs.
-- Estimates an empirical 80% prediction range.
-- Compares Campaign A and Campaign B.
-- Calculates campaign-level predicted D180 ROAS using fixed campaign CAC assumptions.
-- Exports validation metrics and feature associations.
+## Start here: Streamlit app
 
-Campaign A and Campaign B are assumed acquisition strategies because the assignment does not define their real-world meaning. Synthetic campaign-level CAC is ₹90 per acquired user for A and ₹105 for B. CAC, campaign labels, and actual D180 LTV are excluded from the predictive feature set; actual D180 LTV is retained for evaluation.
-
-## Run
-```bash
-pip install -r requirements.txt
-python train_model.py
-```
-
-## Predict for new users
-
-Training saves the selected subscription and ad-supported models to `models/cel_d180_ltv.joblib`. The models are refit on all labeled synthetic users, and the artifact includes the feature schema and empirical 80% prediction-range offsets.
-
-Run these commands from the project folder. If you are using the notebook, first run its setup/data/modeling cells, then use a notebook terminal or a cell prefixed with `!` for the commands below. The training and prediction scripts resolve their input data and saved model relative to the project folder.
-
-```bash
-# Install dependencies once, then build the saved model artifact
-pip install -r requirements.txt
-python train_model.py
-
-# Run all sample users together
-python predict_ltv.py data/test_users_for_prediction.csv --output outputs/test_user_predictions.csv
-
-# Run just one sample user by ID
-python predict_ltv.py data/test_users_for_prediction.csv --user-id TEST-004 --output outputs/one_user_prediction.csv
-```
-
-To predict for new users, copy `data/new_users_template.csv`, replace the example Day 0–7 values, and keep the `product` value as either `subscription` or `ad_supported`. Enter a positive `cac` (acquisition cost per user) for each row. `campaign` is optional and groups campaign summaries. Include a unique `test_user_id` (or `user_id`) column if you want to select one row with `--user-id`. Leave `days_to_trial` blank when a subscription user did not start a trial. Subscription rows use the trial/subscription columns; ad-supported rows use the ad columns. The unused product-specific columns may remain blank. Then run `python predict_ltv.py my_new_users.csv --output predictions.csv` to score the whole file, or add `--user-id YOUR_ID` to score one row.
-
-ROAS is calculated as predicted D180 LTV divided by CAC. The predictions CSV includes per-user ROAS and its lower/upper empirical range. When campaign labels are supplied, the CLI also writes a `*_campaign_summary.csv` with aggregate predicted revenue, acquisition cost and D180 ROAS by product and campaign. CAC and campaign are economic/context inputs and are not model features.
-
-The one-user option requires the selected ID to match exactly one input row. For a ready-to-run example, use `data/test_users_for_prediction.csv`; its per-user results are in `outputs/test_user_predictions.csv` and its campaign summary is in `outputs/test_user_predictions_campaign_summary.csv`.
-
-The output includes predicted D180 LTV and ROAS plus empirical 80% ranges. The prediction ranges describe residual variation in this synthetic validation setup; they are not guarantees. Retrain after changing the training data or selected models.
-
-## Streamlit input page
-
-To open a page for entering users manually, install the requirements and start the app from the project folder:
+From the project folder, install dependencies and open the app:
 
 ```bash
 pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
-Streamlit opens the app at `http://localhost:8501`. Upload a CSV to load its user rows into the editable input table, or enter users directly. Uploaded columns the model does not use are ignored; missing model inputs and CAC appear blank for completion. **Feature descriptions** is collapsed at the top of the page. Without an uploaded file, the first table row starts with a randomly sampled synthetic example profile; replace its values with the user's metrics before using it. Edit the table one user per row, choose the product, and add rows with the table control to score multiple users together. Hover over a column heading for its short definition. Leave the feature columns for the other product blank and enter a positive CAC per user. Click **Predict D180 LTV** to view predicted LTV, per-user ROAS, and their empirical 80% ranges. Campaign-level summaries appear when campaign labels are provided. Download the results as a CSV.
+The app opens at `http://localhost:8501`. Its first row contains a randomly sampled synthetic example. Replace those values before making a prediction.
 
-The saved models must exist at `models/cel_d180_ltv.joblib`. If they do not, run `python train_model.py` before starting the app. From a notebook, run the command in a terminal opened at the project folder; the notebook itself can still be used for the training and analysis workflow.
+### Input file format
+
+For the exact column names and example values, open [`data/test_users_for_prediction.csv`](data/test_users_for_prediction.csv) in the repository. You can edit this file and upload it in the app, or make a copy and add your own rows. The app loads uploaded rows into the editable table so you can review or correct them before predicting. [`data/new_users_template.csv`](data/new_users_template.csv) is a smaller template with one example row for each product.
+
+Each input row needs:
+
+- `test_user_id`: a unique ID for the user.
+- `product`: exactly `subscription` or `ad_supported`.
+- `cac`: positive acquisition cost per user in INR. This is required for ROAS.
+- Common Day 0–7 model features shown in the CSV headers.
+- Product-specific features: trial and subscription fields for `subscription`, or ad fields for `ad_supported`.
+
+`campaign` is optional. It labels users for campaign-level summaries. Leave unused product-specific fields blank. Leave `days_to_trial` blank if the subscription user did not start a trial. Hover over the app’s column headings for descriptions, or expand **Feature descriptions**. Those definitions come from `data/CEL_LTV_Feature_Dictionary.xlsx`.
+
+The app returns per-user predicted D180 LTV and ROAS, plus empirical 80% ranges. ROAS is predicted D180 LTV divided by CAC. If campaign labels are supplied, the app also reports aggregate campaign ROAS by product and campaign. CAC and campaign are economic/context inputs; they are not used to predict LTV. You can download the results as a CSV.
+
+The saved models are included at `models/cel_d180_ltv.joblib`. If the file is missing, train it from the project folder with `python train_model.py` before starting the app.
+
+## Command-line predictions
+
+The same saved models can be used without Streamlit. The input CSV must include the required columns described above.
+
+```bash
+# Predict all sample users
+python predict_ltv.py data/test_users_for_prediction.csv --output outputs/test_user_predictions.csv
+
+# Predict one user by ID
+python predict_ltv.py data/test_users_for_prediction.csv --user-id TEST-004 --output outputs/one_user_prediction.csv
+```
+
+The command writes per-user LTV and ROAS to the requested output CSV. When campaign labels are present, it also creates a matching `*_campaign_summary.csv` file with aggregate predicted revenue, acquisition cost, and ROAS.
+
+## Model and analysis
+
+The project:
+
+- Uses Day 0–7 behavior to predict D180 LTV separately for subscription and ad-supported products.
+- Selects models using cross-validation and reports holdout metrics.
+- Estimates empirical 80% prediction ranges.
+- Compares campaign-level predicted LTV and ROAS.
+- Exports validation metrics and feature associations under `outputs/`.
+
+To retrain the saved models after changing the training data or model selection, run:
+
+```bash
+python train_model.py
+```
+
+If you are using the notebook, run its setup, data, and modeling cells first. Then run Streamlit from a terminal opened at the project folder.
 
 ## Important
-This is NOT a production model and is NOT CEL's real data. The synthetic outcome-generating process is intentionally constructed for learning. You should change the assumptions, features, model and narrative before submitting.
 
-## Core flow
-D0–D7 behaviour -> predicted D180 LTV -> predicted D180 revenue -> D180 ROAS -> uncertainty -> campaign comparison.
+This is not a production model and does not use CEL production data. Results are illustrative because the training data and outcome-generation process are synthetic.

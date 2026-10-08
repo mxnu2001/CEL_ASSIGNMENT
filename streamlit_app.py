@@ -164,6 +164,11 @@ def main() -> None:
         "The field help text follows the CEL LTV Feature Dictionary. Values must describe "
         "the first seven days after install."
     )
+    st.info(
+        "For the required CSV headers and example rows, refer to "
+        "`data/test_users_for_prediction.csv` in the repository. You can edit that file "
+        "or upload your own CSV using the same format."
+    )
 
     if not MODEL_PATH.exists():
         st.error("Saved model not found. From the project folder, run `python train_model.py` first.")
