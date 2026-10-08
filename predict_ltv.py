@@ -15,9 +15,29 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_MODEL = ROOT / "models" / "cel_d180_ltv.joblib"
 
 
-def predict(input_path: Path, output_path: Path, model_path: Path) -> None:
+def predict(
+    input_path: Path,
+    output_path: Path,
+    model_path: Path,
+    selected_user_id: str | None = None,
+) -> None:
     artifact = joblib.load(model_path)
     data = pd.read_csv(input_path)
+
+    if selected_user_id is not None:
+        identifier = "test_user_id" if "test_user_id" in data.columns else "user_id"
+        if identifier not in data.columns:
+            raise ValueError(
+                "Single-user prediction needs a 'test_user_id' or 'user_id' column."
+            )
+        selected_rows = data[identifier].astype(str) == str(selected_user_id)
+        if selected_rows.sum() != 1:
+            raise ValueError(
+                f"Expected exactly one row with {identifier}={selected_user_id!r}; "
+                f"found {int(selected_rows.sum())}."
+            )
+        data = data.loc[selected_rows].copy()
+
     if "product" not in data.columns:
         raise ValueError("Input CSV must contain a 'product' column.")
 
@@ -82,8 +102,12 @@ def main() -> None:
         "--model", type=Path, default=DEFAULT_MODEL,
         help="saved model artifact (default: models/cel_d180_ltv.joblib)",
     )
+    parser.add_argument(
+        "--user-id", type=str, default=None,
+        help="predict only the matching test_user_id (or user_id) from the input CSV",
+    )
     args = parser.parse_args()
-    predict(args.input_csv, args.output, args.model)
+    predict(args.input_csv, args.output, args.model, args.user_id)
 
 
 if __name__ == "__main__":

@@ -24,13 +24,23 @@ python train_model.py
 
 Training saves the selected subscription and ad-supported models to `models/cel_d180_ltv.joblib`. The models are refit on all labeled synthetic users, and the artifact includes the feature schema and empirical 80% prediction-range offsets.
 
-Copy `data/new_users_template.csv`, replace the example Day 0–7 values with one row per user, and keep the `product` value as either `subscription` or `ad_supported`. Leave `days_to_trial` blank when a subscription user did not start a trial. Subscription rows use the trial/subscription columns; ad-supported rows use the ad columns. The unused product-specific columns may remain blank.
+Run these commands from the project folder. If you are using the notebook, first run its setup/data/modeling cells, then use a notebook terminal or a cell prefixed with `!` for the commands below. The training and prediction scripts resolve their input data and saved model relative to the project folder.
 
 ```bash
-python predict_ltv.py my_new_users.csv --output predictions.csv
+# Install dependencies once, then build the saved model artifact
+pip install -r requirements.txt
+python train_model.py
+
+# Run all sample users together
+python predict_ltv.py data/test_users_for_prediction.csv --output outputs/test_user_predictions.csv
+
+# Run just one sample user by ID
+python predict_ltv.py data/test_users_for_prediction.csv --user-id TEST-004 --output outputs/one_user_prediction.csv
 ```
 
-For a ready-to-run example, use `data/test_users_for_prediction.csv`; its example results are in `outputs/test_user_predictions.csv`.
+To predict for new users, copy `data/new_users_template.csv`, replace the example Day 0–7 values, and keep the `product` value as either `subscription` or `ad_supported`. Include a unique `test_user_id` (or `user_id`) column if you want to select one row with `--user-id`. Leave `days_to_trial` blank when a subscription user did not start a trial. Subscription rows use the trial/subscription columns; ad-supported rows use the ad columns. The unused product-specific columns may remain blank. Then run `python predict_ltv.py my_new_users.csv --output predictions.csv` to score the whole file, or add `--user-id YOUR_ID` to score one row.
+
+The one-user option requires the selected ID to match exactly one input row. For a ready-to-run example, use `data/test_users_for_prediction.csv`; its batch results are in `outputs/test_user_predictions.csv`.
 
 The output includes predicted D180 LTV and an empirical 80% range in INR for each row. The prediction range describes residual variation in this synthetic validation setup; it is not a guarantee. Retrain after changing the training data or selected models.
 
