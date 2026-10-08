@@ -53,7 +53,7 @@ pip install -r requirements.txt
 streamlit run streamlit_app.py
 ```
 
-Streamlit opens the app at `http://localhost:8501`. Edit the table one user per row, choose the product, and enter the Day 0–7 model inputs. Add rows with the table control to score multiple users together. Hover over a column heading or open **Feature descriptions** for the short definitions from `data/CEL_LTV_Feature_Dictionary.xlsx`. Leave the feature columns for the other product blank. Click **Predict D180 LTV** to view the predicted value and empirical 80% range in INR, then download the results as a CSV.
+Streamlit opens the app at `http://localhost:8501`. **Feature descriptions** is expanded at the top of the page. The first table row starts with a randomly sampled synthetic example profile; replace its values with the user's metrics before using it. Edit the table one user per row, choose the product, and add rows with the table control to score multiple users together. Hover over a column heading for its short definition. Leave the feature columns for the other product blank. Click **Predict D180 LTV** to view the predicted value and empirical 80% range in INR, then download the results as a CSV.
 
 The saved models must exist at `models/cel_d180_ltv.joblib`. If they do not, run `python train_model.py` before starting the app. From a notebook, run the command in a terminal opened at the project folder; the notebook itself can still be used for the training and analysis workflow.
 

@@ -185,10 +185,27 @@ def main() -> None:
         "rewarded_ad_rate_7",
     ]
     input_columns = ["test_user_id", "product"] + all_features
-    empty_row = {column: None for column in input_columns}
-    empty_row["test_user_id"] = "User-001"
-    empty_row["product"] = "subscription"
-    initial_rows = pd.DataFrame([empty_row], columns=input_columns)
+    if "ltv_placeholder_row" not in st.session_state:
+        synthetic_data = pd.read_csv(ROOT / "data" / "synthetic_users.csv")
+        example_product = synthetic_data["product"].sample(n=1).iloc[0]
+        example = synthetic_data.loc[
+            synthetic_data["product"] == example_product
+        ].sample(n=1).iloc[0]
+        placeholder_row = {column: None for column in input_columns}
+        placeholder_row["test_user_id"] = "Example-001"
+        placeholder_row["product"] = example_product
+        active_features = set(artifact["products"][example_product]["features"])
+        for feature in all_features:
+            if (
+                feature in active_features
+                and feature in example.index
+                and pd.notna(example[feature])
+            ):
+                placeholder_row[feature] = example[feature]
+        st.session_state["ltv_placeholder_row"] = placeholder_row
+    initial_rows = pd.DataFrame(
+        [st.session_state["ltv_placeholder_row"]], columns=input_columns
+    )
 
     column_config = {
         "test_user_id": st.column_config.TextColumn(
@@ -211,6 +228,21 @@ def main() -> None:
             format="%d" if step == 1 else "%.2f",
         )
 
+    with st.expander("Feature descriptions", expanded=True):
+        description_rows = [
+            {"Input": FIELD_DETAILS[name][0], "Description": FIELD_DETAILS[name][1]}
+            for name in all_features
+        ]
+        st.dataframe(pd.DataFrame(description_rows), hide_index=True, use_container_width=True)
+        st.caption(
+            "Campaign, CAC, actual D180 LTV, and derived fields not used by the selected "
+            "models are excluded from the prediction inputs."
+        )
+
+    st.info(
+        "The first row is prefilled with a randomly sampled synthetic example. "
+        "Replace these example values with the user's Day 0–7 metrics."
+    )
     st.subheader("User inputs")
     st.write(
         "Edit the first row or use the table's add-row control to enter more users. "
@@ -225,17 +257,6 @@ def main() -> None:
         use_container_width=True,
         key="ltv_user_inputs",
     )
-
-    with st.expander("Feature descriptions"):
-        description_rows = [
-            {"Input": FIELD_DETAILS[name][0], "Description": FIELD_DETAILS[name][1]}
-            for name in all_features
-        ]
-        st.dataframe(pd.DataFrame(description_rows), hide_index=True, use_container_width=True)
-        st.caption(
-            "Campaign, CAC, actual D180 LTV, and derived fields not used by the selected "
-            "models are excluded from the prediction inputs."
-        )
 
     if st.button("Predict D180 LTV", type="primary"):
         try:
