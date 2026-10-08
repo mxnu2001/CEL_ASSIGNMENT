@@ -44,6 +44,19 @@ The one-user option requires the selected ID to match exactly one input row. For
 
 The output includes predicted D180 LTV and an empirical 80% range in INR for each row. The prediction range describes residual variation in this synthetic validation setup; it is not a guarantee. Retrain after changing the training data or selected models.
 
+## Streamlit input page
+
+To open a page for entering users manually, install the requirements and start the app from the project folder:
+
+```bash
+pip install -r requirements.txt
+streamlit run streamlit_app.py
+```
+
+Streamlit opens the app at `http://localhost:8501`. Edit the table one user per row, choose the product, and enter the Day 0–7 model inputs. Add rows with the table control to score multiple users together. Hover over a column heading or open **Feature descriptions** for the short definitions from `data/CEL_LTV_Feature_Dictionary.xlsx`. Leave the feature columns for the other product blank. Click **Predict D180 LTV** to view the predicted value and empirical 80% range in INR, then download the results as a CSV.
+
+The saved models must exist at `models/cel_d180_ltv.joblib`. If they do not, run `python train_model.py` before starting the app. From a notebook, run the command in a terminal opened at the project folder; the notebook itself can still be used for the training and analysis workflow.
+
 ## Important
 This is NOT a production model and is NOT CEL's real data. The synthetic outcome-generating process is intentionally constructed for learning. You should change the assumptions, features, model and narrative before submitting.
 

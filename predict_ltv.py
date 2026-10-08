@@ -15,29 +15,10 @@ ROOT = Path(__file__).resolve().parent
 DEFAULT_MODEL = ROOT / "models" / "cel_d180_ltv.joblib"
 
 
-def predict(
-    input_path: Path,
-    output_path: Path,
-    model_path: Path,
-    selected_user_id: str | None = None,
-) -> None:
-    artifact = joblib.load(model_path)
-    data = pd.read_csv(input_path)
-
-    if selected_user_id is not None:
-        identifier = "test_user_id" if "test_user_id" in data.columns else "user_id"
-        if identifier not in data.columns:
-            raise ValueError(
-                "Single-user prediction needs a 'test_user_id' or 'user_id' column."
-            )
-        selected_rows = data[identifier].astype(str) == str(selected_user_id)
-        if selected_rows.sum() != 1:
-            raise ValueError(
-                f"Expected exactly one row with {identifier}={selected_user_id!r}; "
-                f"found {int(selected_rows.sum())}."
-            )
-        data = data.loc[selected_rows].copy()
-
+def predict_dataframe(data: pd.DataFrame, artifact: dict) -> pd.DataFrame:
+    """Return predictions for user input rows using a loaded model artifact."""
+    if data.empty:
+        raise ValueError("Add at least one user row before requesting predictions.")
     if "product" not in data.columns:
         raise ValueError("Input CSV must contain a 'product' column.")
 
@@ -83,7 +64,33 @@ def predict(
         block = pd.DataFrame(result_columns, index=product_rows.index)
         results.append(block)
 
-    output = pd.concat(results).sort_index()
+    return pd.concat(results).sort_index()
+
+
+def predict(
+    input_path: Path,
+    output_path: Path,
+    model_path: Path,
+    selected_user_id: str | None = None,
+) -> None:
+    artifact = joblib.load(model_path)
+    data = pd.read_csv(input_path)
+
+    if selected_user_id is not None:
+        identifier = "test_user_id" if "test_user_id" in data.columns else "user_id"
+        if identifier not in data.columns:
+            raise ValueError(
+                "Single-user prediction needs a 'test_user_id' or 'user_id' column."
+            )
+        selected_rows = data[identifier].astype(str) == str(selected_user_id)
+        if selected_rows.sum() != 1:
+            raise ValueError(
+                f"Expected exactly one row with {identifier}={selected_user_id!r}; "
+                f"found {int(selected_rows.sum())}."
+            )
+        data = data.loc[selected_rows].copy()
+
+    output = predict_dataframe(data, artifact)
     output_path.parent.mkdir(parents=True, exist_ok=True)
     output.to_csv(output_path, index=False)
     print(f"Wrote predictions to {output_path}")
