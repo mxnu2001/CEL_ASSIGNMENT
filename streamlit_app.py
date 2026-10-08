@@ -228,7 +228,7 @@ def main() -> None:
             format="%d" if step == 1 else "%.2f",
         )
 
-    with st.expander("Feature descriptions", expanded=True):
+    with st.expander("Feature descriptions", expanded=False):
         description_rows = [
             {"Input": FIELD_DETAILS[name][0], "Description": FIELD_DETAILS[name][1]}
             for name in all_features
